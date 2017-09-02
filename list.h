@@ -1,6 +1,11 @@
 #ifndef LIST_H
 #define LIST_H
 
+#include <stddef.h>
+#include <stdbool.h>
+
+#define container_entry(ptr, type, member) ((type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
+
 struct list_head {
     struct list_head *next;
     struct list_head *prev;
