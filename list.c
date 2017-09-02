@@ -4,6 +4,11 @@
 #include <stdlib.h>
 #include "list.h"
 
+inline void init_list_head(struct list_head *head) {
+    head->next = NULL;
+    head->prev = NULL;
+}
+
 inline bool list_empty(struct list_head *head) {
     return head->next == NULL;
 }

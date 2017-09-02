@@ -4,12 +4,15 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-#define container_entry(ptr, type, member) ((type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
+#define container_entry(ptr, type, member) \
+    ((type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
 
 struct list_head {
     struct list_head *next;
     struct list_head *prev;
 };
+
+void init_list_head(struct list_head *head);
 
 bool list_empty(struct list_head *head);
 
