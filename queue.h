@@ -16,6 +16,7 @@ typedef struct LFQueue {
 } LFQueue;
 
 void queue_init(LFQueue *q);
+void queue_node_init(struct queue_node *qn);
 void queue_push(LFQueue *q, void (*func)(), void *params);
 queue_node *queue_pop(LFQueue *q);
 

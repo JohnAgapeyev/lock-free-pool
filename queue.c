@@ -11,6 +11,12 @@ void queue_init(LFQueue *q) {
     q->size = 0;
 }
 
+void queue_node_init(struct queue_node *qn) {
+    qn->work = NULL;
+    qn->args = NULL;
+    init_list_head(&qn->node);
+}
+
 void queue_push(LFQueue *q, void (*func)(), void *params) {
     queue_node *newNode = malloc(sizeof(queue_node));
     if (newNode == NULL) {
