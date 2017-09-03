@@ -35,4 +35,7 @@ void list_replace(struct list_head *old, struct list_head *new);
 #define list_for_each_reverse(pos, head) \
     for (pos = (head)->prev; pos; pos = pos->prev)
 
+#define list_for_each_safe(pos, n, head) \
+    for (pos = (head)->next, n = pos->next; pos; pos = n, n = pos->next)
+
 #endif
