@@ -1,6 +1,7 @@
 #ifndef QUEUE_H
 #define QUEUE_H
 
+#include <stdatomic.h>
 #include "list.h"
 
 typedef struct queue_node {
@@ -12,7 +13,7 @@ typedef struct queue_node {
 typedef struct LFQueue {
     struct queue_node *head;
     struct queue_node *tail;
-    size_t size;
+    atomic_size_t size;
 } LFQueue;
 
 void queue_init(LFQueue *q);
