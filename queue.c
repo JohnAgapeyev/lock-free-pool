@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include "list.h"
 #include "queue.h"
+#include "hazard.h"
 
 void queue_init(LFQueue *q) {
     q->head = NULL;
@@ -29,37 +30,56 @@ void queue_push(LFQueue *q, void (*func)(), void *params) {
     newNode->args = params;
 
     if (q->head == NULL) {
-        init_list_head(&newNode->node);
-        queue_node *oldHead = q->head;
         for (;;) {
-            //Queue is empty
-            if (atomic_compare_exchange_weak(&q->head, &oldHead, newNode)) {
-                break;
+            init_list_head(&newNode->node);
+            queue_node *oldHead = q->head;
+            myHP->hazard[0] = oldHead;
+            if (oldHead != q->head) {
+                continue;
             }
-            //Backoff
+            for (;;) {
+                //Queue is empty
+                if (atomic_compare_exchange_weak(&q->head, &oldHead, newNode)) {
+                    break;
+                }
+                //Backoff
+            }
+            break;
         }
     } else {
-        //assert(q->tail->node.next == NULL);
-        //list_insert_tail(&q->tail->node, &newNode->node);
-
-        newNode->node.next = NULL;
-        newNode->node.prev = &q->tail->node;
-
-        struct list_head *oldNext = q->tail->node.next;
         for (;;) {
-            if (atomic_compare_exchange_weak(&q->tail->node.next, &oldNext, &newNode->node)) {
-                break;
+            struct queue_node *oldTail = q->tail;
+            myHP->hazard[0] = oldTail;
+            if (oldTail != q->tail) {
+                continue;
             }
-            //Backoff
-        }
-    }
-    struct queue_node *oldTail = q->tail;
-    for (;;) {
-        if (atomic_compare_exchange_weak(&q->tail, &oldTail, newNode)) {
+            newNode->node.next = NULL;
+            newNode->node.prev = &q->tail->node;
+
+            struct list_head *oldNext = q->tail->node.next;
+            for (;;) {
+                if (atomic_compare_exchange_weak(&q->tail->node.next, &oldNext, &newNode->node)) {
+                    break;
+                }
+                //Backoff
+            }
             break;
         }
     }
-    atomic_fetch_add(&q->size, 1);
+    for (;;) {
+        struct queue_node *oldTail = q->tail;
+        myHP->hazard[0] = oldTail;
+        if (oldTail != q->tail) {
+            continue;
+        }
+        for (;;) {
+            if (atomic_compare_exchange_weak(&q->tail, &oldTail, newNode)) {
+                break;
+            }
+        }
+        atomic_fetch_add(&q->size, 1);
+        break;
+    }
 }
 
 queue_node *queue_pop(LFQueue *q) {
@@ -67,47 +87,57 @@ queue_node *queue_pop(LFQueue *q) {
         return NULL; //Trying to pop an empty queue
     }
 
-    queue_node *rtn = q->head;
     for (;;) {
-        if (atomic_compare_exchange_weak(&q->head, &rtn, container_entry(rtn->node.next, struct queue_node, node))) {
-            break;
+        queue_node *rtn = q->head;
+        myHP->hazard[0] = rtn;
+        if (rtn != q->head) {
+            continue;
         }
-        //Backoff
-    }
-
-    if (list_empty(&rtn->node)) {
-        //Popped off the last entry
-        struct queue_node *oldHead = q->head;
-        struct queue_node *oldTail = q->tail;
         for (;;) {
-badhead:
-            if (atomic_compare_exchange_weak(&q->head, &oldHead, NULL)) {
-                for (;;) {
-                    if (atomic_compare_exchange_weak(&q->tail, &oldTail, NULL)) {
-                        if (q->head == NULL) {
-                            atomic_store(&q->size, 0);
-                            //Get out of here
-                            goto done;
-                        } else {
-                            goto badhead;                      
-                        }
-                    }
-                    //Backoff
-                }
-            }
-            //Backoff
-        }
-    } else {
-        //list_delete_head(&rtn->node);
-        struct list_head *oldPrev = rtn->node.next->prev;
-        for (;;) {
-            if (atomic_compare_exchange_weak(&rtn->node.next->prev, &oldPrev, NULL)) {
+            if (atomic_compare_exchange_weak(&q->head, &rtn, container_entry(rtn->node.next, struct queue_node, node))) {
                 break;
             }
             //Backoff
         }
-        atomic_fetch_sub(&q->size, 1);
+
+        if (list_empty(&rtn->node)) {
+            //Popped off the last entry
+            struct queue_node *oldHead = q->head;
+            struct queue_node *oldTail = q->tail;
+            myHP->hazard[1] = oldTail;
+            if (oldTail != q->tail) {
+                continue;
+            }
+            for (;;) {
+    badhead:
+                if (atomic_compare_exchange_weak(&q->head, &oldHead, NULL)) {
+                    for (;;) {
+                        if (atomic_compare_exchange_weak(&q->tail, &oldTail, NULL)) {
+                            if (q->head == NULL) {
+                                atomic_store(&q->size, 0);
+                                //Get out of here
+                                goto done;
+                            } else {
+                                goto badhead;                      
+                            }
+                        }
+                        //Backoff
+                    }
+                }
+                //Backoff
+            }
+        } else {
+            struct list_head *oldPrev = rtn->node.next->prev;
+            for (;;) {
+                if (atomic_compare_exchange_weak(&rtn->node.next->prev, &oldPrev, NULL)) {
+                    break;
+                }
+                //Backoff
+            }
+            atomic_fetch_sub(&q->size, 1);
+        }
+    done:
+        retireNode(rtn);
+        return rtn;
     }
-done:
-    return rtn;
 }

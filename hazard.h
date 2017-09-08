@@ -10,7 +10,7 @@ typedef struct {
 } retiredNode;
 
 #define HAZARD_COUNT 2
-#define THRESHOLD 10
+#define THRESHOLD 6
 
 struct HazardPointer {
     struct queue_node *hazard[HAZARD_COUNT];
@@ -22,10 +22,10 @@ struct HazardPointer {
 
 typedef struct HazardPointer HazardPointer;
 
-static HazardPointer *hpList;
-static atomic_size_t hpCount;
+extern HazardPointer *hpList;
+extern atomic_size_t hpCount;
 
-_Thread_local HazardPointer *myHP;
+extern _Thread_local HazardPointer *myHP;
 
 void init_hazard_pointer(HazardPointer *hp);
 void scan(HazardPointer *hp);
