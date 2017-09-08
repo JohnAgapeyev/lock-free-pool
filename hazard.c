@@ -7,7 +7,7 @@
 #include "list.h"
 #include "hazard.h"
 
-HazardPointer *hpList;
+HazardPointer * _Atomic hpList;
 atomic_size_t hpCount;
 _Thread_local HazardPointer *myHP;
 
@@ -36,7 +36,6 @@ void scan(HazardPointer *hp) {
         for (int i = 0; i < HAZARD_COUNT; ++i) {
             if (entry->hazard[i]) {
                 pointerList[pCount++] = entry->hazard[i];
-                assert(pCount < hpCount);
             }
         }
     }
@@ -137,7 +136,7 @@ void retireHazardPointer(HazardPointer *hp) {
     atomic_store(&hp->active, false);
 }
 
-void retireNode(struct queue_node *node) {
+void retireNode(struct queue_node * _Atomic node) {
     retiredNode *entry = malloc(sizeof(retiredNode));
     if (entry == NULL) {
         //Allocation failure

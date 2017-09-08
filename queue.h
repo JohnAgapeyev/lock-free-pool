@@ -11,14 +11,14 @@ typedef struct queue_node {
 } queue_node;
 
 typedef struct LFQueue {
-    struct queue_node *head;
-    struct queue_node *tail;
+    struct queue_node * _Atomic head;
+    struct queue_node * _Atomic tail;
     atomic_size_t size;
 } LFQueue;
 
 void queue_init(LFQueue *q);
 void queue_node_init(struct queue_node *qn);
 void queue_push(LFQueue *q, void (*func)(), void *params);
-queue_node *queue_pop(LFQueue *q);
+queue_node *queue_pop(LFQueue * _Atomic q);
 
 #endif

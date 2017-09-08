@@ -13,7 +13,7 @@ typedef struct {
 #define THRESHOLD 6
 
 struct HazardPointer {
-    struct queue_node *hazard[HAZARD_COUNT];
+    struct queue_node * _Atomic hazard[HAZARD_COUNT];
     struct list_head recordList;
     atomic_bool active;
     retiredNode nodeList;
@@ -22,7 +22,7 @@ struct HazardPointer {
 
 typedef struct HazardPointer HazardPointer;
 
-extern HazardPointer *hpList;
+extern HazardPointer * _Atomic hpList;
 extern atomic_size_t hpCount;
 
 extern _Thread_local HazardPointer *myHP;
@@ -32,6 +32,6 @@ void scan(HazardPointer *hp);
 void helpScan();
 void allocateHazardPointer();
 void retireHazardPointer(HazardPointer *hp);
-void retireNode(struct queue_node *node);
+void retireNode(struct queue_node * _Atomic node);
 
 #endif

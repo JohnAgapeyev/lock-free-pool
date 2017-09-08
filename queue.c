@@ -82,13 +82,13 @@ void queue_push(LFQueue *q, void (*func)(), void *params) {
     }
 }
 
-queue_node *queue_pop(LFQueue *q) {
+queue_node *queue_pop(LFQueue * _Atomic q) {
     if (q->head == NULL) {
         return NULL; //Trying to pop an empty queue
     }
 
     for (;;) {
-        queue_node *rtn = q->head;
+        queue_node * _Atomic rtn = q->head;
         myHP->hazard[0] = rtn;
         if (rtn != q->head) {
             continue;
