@@ -33,5 +33,6 @@ void helpScan();
 void allocateHazardPointer();
 void retireHazardPointer(HazardPointer *hp);
 void retireNode(struct queue_node * node);
+void free_hazard_pointer(HazardPointer *hp);
 
 #endif

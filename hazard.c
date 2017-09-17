@@ -27,8 +27,7 @@ void init_hazard_pointer(HazardPointer *hp) {
 }
 
 void scan(HazardPointer *hp) {
-    //THIS IS A BIG PROBLEM, CHANGE ARRAY SIZE TO PREVENT OVERFLOW
-    struct queue_node *pointerList[hp->rCount];
+    struct queue_node *pointerList[hpCount * HAZARD_COUNT];
     size_t pCount = 0;
     struct list_head *pos;
     //Add active hazard pointers to pList
@@ -47,27 +46,22 @@ void scan(HazardPointer *hp) {
     struct list_head *pPosNext = &posNext;
     //Compare pList and rList and remove any rList entries that are not in pList
     for (pos = &myHP->rList.head, pPosNext = pos->next; 
-            pPosNext && hp->rCount; pos = pPosNext, pPosNext = pos->next) {
+            pPosNext && hp->rCount; pPosNext = pos->next) {
 
         retiredNode *listNode = container_entry(pPosNext, retiredNode, head);
 
         if (bsearch((const void *) &(listNode->node), pointerList, pCount, 
                     sizeof(struct queue_node *), pointerCompare) == NULL) {
-            if (hp->rCount == 0) {
-                //Don't try and remove an empty entry
-                break;
-            }
-
             //Remove from linked list of retired nodes
-            if (listNode->head.next != NULL) {
-                pos->next = listNode->head.next;
-            }
+            pos->next = pPosNext->next;
 
             assert(hp->rCount > 0);
             atomic_fetch_sub(&hp->rCount, 1);
             //Handle re-use here instead of freeing the list entry
+            free(listNode);
         } else {
             //puts("Found one");
+            pos = pPosNext; 
         }
     }
 }
@@ -168,3 +162,11 @@ void retireNode(struct queue_node * node) {
     }
 }
 
+void free_hazard_pointer(HazardPointer *hp) {
+    struct list_head *pos;
+    for (pos = &(hp->recordList); pos;) {
+        HazardPointer *hp = container_entry(pos, HazardPointer, recordList);
+        pos = pos->next;
+        free(hp);
+    }
+}
