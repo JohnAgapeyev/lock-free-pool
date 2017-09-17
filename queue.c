@@ -19,7 +19,7 @@ void queue_node_init(struct queue_node *qn) {
     init_list_head(&qn->node);
 }
 
-void queue_push(LFQueue *q, void (*func)(), void *params) {
+void queue_push(LFQueue *q, void (*func)(void *), void *params) {
     queue_node *newNode = malloc(sizeof(queue_node));
     if (newNode == NULL) {
         //Allocation failure
@@ -54,7 +54,6 @@ void queue_push(LFQueue *q, void (*func)(), void *params) {
                 continue;
             }
             newNode->node.next = NULL;
-            newNode->node.prev = &q->tail->node;
 
             struct list_head *oldNext = q->tail->node.next;
             for (;;) {
@@ -82,19 +81,20 @@ void queue_push(LFQueue *q, void (*func)(), void *params) {
     }
 }
 
-queue_node *queue_pop(LFQueue * _Atomic q) {
+queue_node *queue_pop(LFQueue *q) {
     if (q->head == NULL) {
         return NULL; //Trying to pop an empty queue
     }
 
     for (;;) {
-        queue_node * _Atomic rtn = q->head;
+        queue_node * rtn = q->head;
         myHP->hazard[0] = rtn;
         if (rtn != q->head) {
             continue;
         }
         for (;;) {
-            if (atomic_compare_exchange_weak(&q->head, &rtn, container_entry(rtn->node.next, struct queue_node, node))) {
+            if (atomic_compare_exchange_weak(&q->head, &rtn, 
+                        container_entry(rtn->node.next, struct queue_node, node))) {
                 break;
             }
             //Backoff
@@ -109,7 +109,7 @@ queue_node *queue_pop(LFQueue * _Atomic q) {
                 continue;
             }
             for (;;) {
-    badhead:
+badhead:
                 if (atomic_compare_exchange_weak(&q->head, &oldHead, NULL)) {
                     for (;;) {
                         if (atomic_compare_exchange_weak(&q->tail, &oldTail, NULL)) {
@@ -127,16 +127,9 @@ queue_node *queue_pop(LFQueue * _Atomic q) {
                 //Backoff
             }
         } else {
-            struct list_head *oldPrev = rtn->node.next->prev;
-            for (;;) {
-                if (atomic_compare_exchange_weak(&rtn->node.next->prev, &oldPrev, NULL)) {
-                    break;
-                }
-                //Backoff
-            }
             atomic_fetch_sub(&q->size, 1);
         }
-    done:
+done:
         retireNode(rtn);
         return rtn;
     }

@@ -9,33 +9,25 @@
 
 struct list_head {
     struct list_head *next;
-    struct list_head *prev;
 };
 
 void init_list_head(struct list_head *head);
 
 bool list_empty(struct list_head *head);
 
-//Insert new node before list head
-void list_insert_head(struct list_head *head, struct list_head *new);
-//Insert new node after list tail
-void list_insert_tail(struct list_head *tail, struct list_head *new);
-//Insert new node before given node
-void list_insert_node(struct list_head *node, struct list_head *new);
+//Insert node after the tail
+void list_push(struct list_head *tail, struct list_head *new);
 
 void list_delete_head(struct list_head *head);
-void list_delete_tail(struct list_head *tail);
-void list_delete_node(struct list_head *node);
-
-void list_replace(struct list_head *old, struct list_head *new);
+void list_delete_tail(struct list_head *prev);
+void list_delete_node(struct list_head *prev, struct list_head *node);
 
 #define list_for_each(pos, head) \
     for (pos = (head)->next; pos; pos = pos->next)
 
-#define list_for_each_reverse(pos, head) \
-    for (pos = (head)->prev; pos; pos = pos->prev)
-
+/*
 #define list_for_each_safe(pos, n, head) \
     for (pos = (head)->next, n = pos->next; pos; pos = n, n = pos->next)
+*/
 
 #endif

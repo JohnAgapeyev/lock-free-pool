@@ -7,7 +7,7 @@
 #include "list.h"
 #include "hazard.h"
 
-HazardPointer * _Atomic hpList;
+HazardPointer * hpList;
 atomic_size_t hpCount;
 _Thread_local HazardPointer *myHP;
 
@@ -21,13 +21,14 @@ void init_hazard_pointer(HazardPointer *hp) {
     }
     init_list_head(&hp->recordList);
     atomic_store(&hp->active, false);
-    queue_node_init(&hp->nodeList.node);
-    init_list_head(&hp->nodeList.listOfNodes);
+    queue_node_init(&hp->rList.node);
+    init_list_head(&hp->rList.head);
     atomic_store(&hp->rCount, 0);
 }
 
 void scan(HazardPointer *hp) {
-    struct queue_node *pointerList[hpCount];
+    //THIS IS A BIG PROBLEM, CHANGE ARRAY SIZE TO PREVENT OVERFLOW
+    struct queue_node *pointerList[hp->rCount];
     size_t pCount = 0;
     struct list_head *pos;
     //Add active hazard pointers to pList
@@ -39,28 +40,34 @@ void scan(HazardPointer *hp) {
             }
         }
     }
+    //If pCount == 0 then pList will contain garbage, leading to awkward subtraction issues
     qsort((void *) &pointerList, pCount, sizeof(struct queue_node *), pointerCompare);
 
-    struct list_head scratch;
-    struct list_head *pScratch = &scratch;
+    struct list_head posNext;
+    struct list_head *pPosNext = &posNext;
     //Compare pList and rList and remove any rList entries that are not in pList
-    for (pos = myHP->nodeList.listOfNodes.next, pScratch = pos->next; 
-            pos && pScratch; pos = pScratch, pScratch = pos->next) {
-        retiredNode *listNode = container_entry(pos, retiredNode, listOfNodes);
-        if (bsearch(&(listNode->node), pointerList, pCount, sizeof(struct queue_node *), pointerCompare) == NULL) {
-            //Remove from linked list of retired nodes
-            if (listNode->listOfNodes.prev == NULL) {
-                if (!list_empty(&listNode->listOfNodes)) {
-                    list_delete_head(&listNode->listOfNodes);
-                }
-            } else if (listNode->listOfNodes.next == NULL) {
-                list_delete_tail(&listNode->listOfNodes);
-            } else {
-                list_delete_node(&listNode->listOfNodes);
+    for (pos = &myHP->rList.head, pPosNext = pos->next; 
+            pPosNext && hp->rCount; pos = pPosNext, pPosNext = pos->next) {
+
+        retiredNode *listNode = container_entry(pPosNext, retiredNode, head);
+
+        if (bsearch((const void *) &(listNode->node), pointerList, pCount, 
+                    sizeof(struct queue_node *), pointerCompare) == NULL) {
+            if (hp->rCount == 0) {
+                //Don't try and remove an empty entry
+                break;
             }
-            init_list_head(&listNode->listOfNodes); //Null out the linked list portion
+
+            //Remove from linked list of retired nodes
+            if (listNode->head.next != NULL) {
+                pos->next = listNode->head.next;
+            }
+
+            assert(hp->rCount > 0);
             atomic_fetch_sub(&hp->rCount, 1);
             //Handle re-use here instead of freeing the list entry
+        } else {
+            //puts("Found one");
         }
     }
 }
@@ -76,12 +83,15 @@ void helpScan() {
             continue;
         }
         while (entry->rCount > 0) {
-            struct list_head *temp = &entry->nodeList.listOfNodes;
-            retiredNode *tempEntry = container_entry(temp, retiredNode, listOfNodes);
+            struct list_head *temp = &entry->rList.head;
+            retiredNode *tempEntry = container_entry(temp, retiredNode, head);
             list_delete_head(temp); 
             atomic_fetch_sub(&entry->rCount, 1);
-            list_insert_head(&myHP->nodeList.listOfNodes, temp);
-            myHP->nodeList = *tempEntry;
+
+            temp->next = &myHP->rList.head;
+            myHP->rList.head = *temp;
+
+            myHP->rList = *tempEntry;
             atomic_fetch_add(&myHP->rCount, 1);
             if (atomic_load(&myHP->rCount) > THRESHOLD) {
                 scan(hpList);
@@ -117,7 +127,8 @@ void allocateHazardPointer() {
 
     init_hazard_pointer(newHP);
 
-    list_insert_head(&hpList->recordList, &(newHP->recordList));
+    newHP->recordList.next = &hpList->recordList;
+    //hpList->recordList.next = &newHP->recordList;
 
     HazardPointer *oldHead = hpList;
     for (;;) {
@@ -136,18 +147,18 @@ void retireHazardPointer(HazardPointer *hp) {
     atomic_store(&hp->active, false);
 }
 
-void retireNode(struct queue_node * _Atomic node) {
+void retireNode(struct queue_node * node) {
     retiredNode *entry = malloc(sizeof(retiredNode));
     if (entry == NULL) {
         //Allocation failure
         abort();
     }
     entry->node = *node;
-    init_list_head(&entry->listOfNodes);
+    entry->head.next = NULL;
 
-    list_insert_head(&myHP->nodeList.listOfNodes, &entry->listOfNodes);
-
-    myHP->nodeList = *entry;
+    //Add entry after head of rList
+    entry->head.next = myHP->rList.head.next;
+    myHP->rList.head.next = &entry->head;
 
     atomic_fetch_add(&myHP->rCount, 1);
 
