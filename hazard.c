@@ -1,13 +1,12 @@
-#define _POSIX_C_SOURCE 200809L //Enable POSIX 2008 features
-
 #include <stdio.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <stdbool.h>
 #include "list.h"
 #include "hazard.h"
 
-HazardPointer * hpList;
+HazardPointer * _Atomic hpList;
 atomic_size_t hpCount;
 _Thread_local HazardPointer *myHP;
 
@@ -17,13 +16,27 @@ int pointerCompare(const void *a, const void *b) {
 
 void init_hazard_pointer(HazardPointer *hp) {
     for (int i = 0; i < HAZARD_COUNT; ++i) {
-        hp->hazard[i] = NULL;
+        hp->hazard[i] = ATOMIC_VAR_INIT(NULL);
     }
     init_list_head(&hp->recordList);
-    atomic_store(&hp->active, false);
-    queue_node_init(&hp->rList.node);
-    init_list_head(&hp->rList.head);
-    atomic_store(&hp->rCount, 0);
+    hp->active = ATOMIC_VAR_INIT(false);
+
+    init_list_head(&hp->rList);
+
+    /*
+    retiredNode *rTemp = malloc(sizeof(retiredNode));
+    if (rTemp == NULL) {
+        perror("Allocation failure");
+        abort();
+    }
+    hp->rList = ATOMIC_VAR_INIT(rTemp);
+
+    queue_node_init(&hp->rList->node);
+    init_list_head(&hp->rList->head);
+    */
+
+
+    hp->rCount = ATOMIC_VAR_INIT(0);
 }
 
 void scan(HazardPointer *hp) {
@@ -45,23 +58,37 @@ void scan(HazardPointer *hp) {
     struct list_head posNext;
     struct list_head *pPosNext = &posNext;
     //Compare pList and rList and remove any rList entries that are not in pList
-    for (pos = &myHP->rList.head, pPosNext = pos->next; 
+    for (pos = &myHP->rList, pPosNext = pos->next;
             pPosNext && hp->rCount; pPosNext = pos->next) {
+
+        /*
+    for (pos = &myHP->rList->head, pPosNext = pos->next;
+            pPosNext && hp->rCount; pPosNext = pos->next) {
+        */
 
         retiredNode *listNode = container_entry(pPosNext, retiredNode, head);
 
-        if (bsearch((const void *) &(listNode->node), pointerList, pCount, 
+        if (bsearch((const void *) &(listNode->node), pointerList, pCount,
                     sizeof(struct queue_node *), pointerCompare) == NULL) {
             //Remove from linked list of retired nodes
-            pos->next = pPosNext->next;
+            //pos->next = pPosNext->next;
 
-            assert(hp->rCount > 0);
+            struct list_head *oldPos = pos->next;
+            for (;;) {
+                if (atomic_compare_exchange_weak(&pos->next, &oldPos, pPosNext->next)) {
+                    break;
+                }
+                //Backoff
+            }
+
+            //assert(hp->rCount > 0);
             atomic_fetch_sub(&hp->rCount, 1);
             //Handle re-use here instead of freeing the list entry
-            free(listNode);
+            //free(listNode);
+            pPosNext = NULL;
         } else {
             //puts("Found one");
-            pos = pPosNext; 
+            pos = pPosNext;
         }
     }
 }
@@ -77,15 +104,20 @@ void helpScan() {
             continue;
         }
         while (entry->rCount > 0) {
-            struct list_head *temp = &entry->rList.head;
-            retiredNode *tempEntry = container_entry(temp, retiredNode, head);
-            list_delete_head(temp); 
+            struct list_head *temp = &entry->rList;
+            //retiredNode *tempEntry = container_entry(temp, retiredNode, head);
+            list_delete_head(temp);
             atomic_fetch_sub(&entry->rCount, 1);
 
-            temp->next = &myHP->rList.head;
-            myHP->rList.head = *temp;
+            /*
+            temp->next = &myHP->rList->head;
+            myHP->rList->head.next = temp->next;
+            myHP->rList->node = tempEntry->node;
+            */
 
-            myHP->rList = *tempEntry;
+            temp->next = &myHP->rList;
+            myHP->rList.next = temp;
+
             atomic_fetch_add(&myHP->rCount, 1);
             if (atomic_load(&myHP->rCount) > THRESHOLD) {
                 scan(hpList);
@@ -151,8 +183,12 @@ void retireNode(struct queue_node * node) {
     entry->head.next = NULL;
 
     //Add entry after head of rList
-    entry->head.next = myHP->rList.head.next;
-    myHP->rList.head.next = &entry->head;
+    /*
+    entry->head.next = myHP->rList->head.next;
+    myHP->rList->head.next = &entry->head;
+    */
+    entry->head.next = myHP->rList.next;
+    myHP->rList.next = &entry->head;
 
     atomic_fetch_add(&myHP->rCount, 1);
 
@@ -167,6 +203,19 @@ void free_hazard_pointer(HazardPointer *hp) {
     for (pos = &(hp->recordList); pos;) {
         HazardPointer *hp = container_entry(pos, HazardPointer, recordList);
         pos = pos->next;
+        //free(hp->rList);
+
+        /*
+        struct list_head rListPos;
+        for (rListPos = (&hp->rList); rListPos) {
+            retiredNode *rNode = container_entry(rListPos, retired);
+            rListPos = rListPos->next;
+        }
+        */
+
+
+
+
         free(hp);
     }
 }

@@ -1,11 +1,10 @@
-#define _POSIX_C_SOURCE 200809L //Enable POSIX 2008 features
-
+#include <stdatomic.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include "list.h"
 
 inline void init_list_head(struct list_head *head) {
-    head->next = NULL;
+    head->next = ATOMIC_VAR_INIT(NULL);
 }
 
 inline bool list_empty(struct list_head *head) {
@@ -31,7 +30,7 @@ inline void list_delete_tail(struct list_head *prev) {
 }
 
 inline void list_delete_node(struct list_head *prev, struct list_head *node) {
-    prev->next = node->next; 
+    prev->next = node->next;
     node = NULL;
 }
 

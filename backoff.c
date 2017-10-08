@@ -1,5 +1,3 @@
-#define _POSIX_C_SOURCE 200809L //Enable POSIX 2008 features
-
 #include <time.h>
 #include <math.h>
 #include <assert.h>
@@ -9,7 +7,7 @@ void backoff(backoff_type *back) {
     assert(back != NULL);
     assert(back->curr <= back->cap);
     assert(back->curr < 32); //Prevent over-shifting
-    
+
     struct timespec ts = {0, (1ul << back->curr) * 1000};
     nanosleep(&ts, NULL);
     ++(back->curr);

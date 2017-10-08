@@ -1,6 +1,7 @@
 #ifndef LIST_H
 #define LIST_H
 
+#include <stdatomic.h>
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -8,7 +9,7 @@
     ((type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
 
 struct list_head {
-    struct list_head *next;
+    struct list_head * _Atomic next;
 };
 
 void init_list_head(struct list_head *head);
