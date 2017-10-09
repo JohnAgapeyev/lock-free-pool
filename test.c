@@ -3,13 +3,14 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include "queue.h"
+#include "refcount.h"
 
 #define MAX_THREADS_POWER 10
 #define MAX_THREADS (1u << MAX_THREADS_POWER)
 #define TASK_COUNT 10000
 
 void print1() {
-#if 0
+#if 1
     fprintf(stderr, "1\n");
 #else
     fprintf(stdout, "1\n");
@@ -17,7 +18,7 @@ void print1() {
 }
 
 void print2() {
-#if 0
+#if 1
     fprintf(stderr, "2\n");
 #else
     fprintf(stdout, "2\n");
@@ -25,7 +26,7 @@ void print2() {
 }
 
 void print(void *num) {
-#if 0
+#if 1
     fprintf(stderr, "%d\n", *((int *) num));
 #else
     fprintf(stdout, "%d\n", *((int *) num));
@@ -53,9 +54,10 @@ void deleteQueue(LFQueue *q) {
         struct queue_node *job = queue_pop(q);
         if (job) {
             job->work(job->args);
-            //free(job);
+            //printf("Job ref count: %zu\n", refcount_read(&(job->node.refCounter)));
+            refcount_put(&(job->node.refCounter), list_node_delete);
         } else {
-#if 0
+#if 1
     fprintf(stderr, "Queue is empty\n");
 #else
     fprintf(stdout, "Queue is empty\n");
@@ -102,18 +104,18 @@ int main(void) {
     queue_init(q);
 
     //Redirect stderr to /dev/null
-#if 0
+#if 1
     freopen("/dev/null", "w", stderr);
 #else
     freopen("/dev/null", "w", stdout);
 #endif
 
-#if 0
+#if 1
     multiThreaded(q);
 #else
     singleThreaded(q);
 #endif
 
-    //free(q);
+    free(q);
     return EXIT_SUCCESS;
 }

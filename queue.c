@@ -1,4 +1,5 @@
 #include <stdatomic.h>
+#include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
 #include "list.h"
@@ -6,7 +7,6 @@
 #include "refcount.h"
 
 void queue_init(LFQueue *q) {
-    //q->head = ATOMIC_VAR_INIT(NULL);
     init_list_head(&(q->head));
     q->size = ATOMIC_VAR_INIT(0);
 }
@@ -15,7 +15,6 @@ void queue_node_init(struct queue_node *qn) {
     qn->work = NULL;
     qn->args = NULL;
     init_list_head(&qn->node);
-    init_refcount(&qn->refCounter);
 }
 
 bool queue_empty(const LFQueue *q) {
@@ -33,8 +32,28 @@ void queue_push(LFQueue *q, void (*func)(void *), void *params) {
     newNode->work = func;
     newNode->args = params;
 
+    struct list_head *temp = refcount_get(&(newNode->node.refCounter));
+    assert(temp != NULL);
+    assert(temp == &(newNode->node));
+
     //Might need CAS loop instead of list call
-    list_push_tail(&(q->head), &(newNode->node));
+    //newNode->node.next = &(q->head);
+
+    struct list_head * _Atomic tempHead = &(q->head);
+    list_assign_pointer(&(newNode->node.next), &tempHead);
+
+    //newNode->node.prev = q->head.prev;
+    list_assign_pointer(&(newNode->node.prev), &(q->head.prev));
+
+    struct list_head * _Atomic tempNode = &(newNode->node);
+
+    //q->head.prev->next = &(newNode->node);
+    list_assign_pointer(&(q->head.prev->next), &tempNode);
+
+    //q->head.prev = &(newNode->node);
+    list_assign_pointer(&(q->head.prev), &tempNode);
+
+    refcount_put(&(temp->refCounter), list_node_delete);
 
     atomic_fetch_add(&q->size, 1);
 }
@@ -43,68 +62,23 @@ queue_node *queue_pop(LFQueue *q) {
     if (queue_empty(q)) {
         return NULL; //Trying to pop an empty queue
     }
+    //struct list_head *oldHead = q->head.next;
+    struct list_head *oldHead = refcount_get(&(q->head.next->refCounter));
+    assert(oldHead != NULL);
 
-    struct list_head *oldTail = q->head.prev;
-    list_delete_tail(&(q->head));
+    //q->head.next->next->prev = q->head.next->prev;
+    list_assign_pointer(&(q->head.next->next->prev), &(q->head.next->prev));
 
-    queue_node *rtn = container_entry(oldTail, queue_node, node);
+    //q->head.next->prev->next = q->head.next->next;
+    //list_assign_pointer(&(q->head.next->prev->next), &(q->head.next->next));
+    list_assign_pointer(&(q->head.next), &(q->head.next->next));
 
+    refcount_put(&(oldHead->next->refCounter), list_node_delete);
+    refcount_put(&(oldHead->prev->refCounter), list_node_delete);
+
+    queue_node *rtn = container_entry(oldHead, queue_node, node);
 
     atomic_fetch_sub(&q->size, 1);
 
     return rtn;
-
-#if 0
-    queue_node *rtn = q->head;
-    for (;;) {
-        if (atomic_compare_exchange_weak(&q->head, &rtn,
-                    container_entry(rtn->node.next, struct queue_node, node))) {
-            break;
-        }
-        //Backoff
-    }
-
-    if (list_empty(&rtn->node)) {
-        //Popped off the last entry
-#if 0
-            LFQueue *temp = malloc(sizeof(LFQueue));
-            if (temp == NULL) {
-                //perror("Allocation failure");
-                abort();
-            }
-            temp->head = ATOMIC_VAR_INIT(NULL);
-            temp->tail = ATOMIC_VAR_INIT(NULL);
-            temp->size = ATOMIC_VAR_INIT(0);
-
-            LFQueue *old = *q;
-            *q = temp;
-            free(old);
-#else
-        struct queue_node *oldHead = q->head;
-        struct queue_node *oldTail = q->tail;
-        for (;;) {
-badhead:
-            if (atomic_compare_exchange_weak(&q->head, &oldHead, NULL)) {
-                for (;;) {
-                    if (atomic_compare_exchange_weak(&q->tail, &oldTail, NULL)) {
-                        if (q->head == NULL) {
-                            atomic_store(&q->size, 0);
-                            //Get out of here
-                            goto done;
-                        } else {
-                            goto badhead;
-                        }
-                    }
-                    //Backoff
-                }
-            }
-            //Backoff
-#endif
-        }
-    } else {
-        atomic_fetch_sub(&q->size, 1);
-    }
-done:
-    return rtn;
-#endif
 }

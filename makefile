@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -std=c11 -pedantic -D_POSIX_C_SOURCE=200809L -g -Og -fsanitize=thread
+CFLAGS=-Wall -Wextra -std=c11 -pedantic -D_POSIX_C_SOURCE=200809L -ggdb -O0
 CLIBS=-pthread
 EXEC=test
 DEPS=$(EXEC).d

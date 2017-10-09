@@ -6,18 +6,18 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-typedef struct queue_node queue_node;
+struct list_head;
 
 struct refcount {
     atomic_size_t count;
     pthread_spinlock_t spin;
 };
 
-void init_refcount(struct refcount *ref);
+void init_refcount(struct refcount *ref, const size_t init);
 void del_refcount(struct refcount *ref);
-queue_node *refcount_get(struct refcount *ref);
+struct list_head *refcount_get(struct refcount *ref);
 bool refcount_put(struct refcount *ref, void (*destructor)(struct refcount *));
 size_t refcount_read(struct refcount *ref);
-void queue_node_delete(struct refcount *ref);
+void list_node_delete(struct refcount *ref);
 
 #endif
