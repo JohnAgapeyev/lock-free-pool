@@ -6,7 +6,14 @@
 #include "queue.h"
 #include "list.h"
 
+pthread_mutex_t mut;
+atomic_bool b = ATOMIC_VAR_INIT(false);
+
 void init_refcount(struct refcount *ref, const size_t init) {
+    if (!b) {
+        atomic_store(&b, true);
+        pthread_mutex_init(&mut, NULL);
+    }
     ref->count = ATOMIC_VAR_INIT(init);
     if (pthread_spin_init(&(ref->spin), PTHREAD_PROCESS_PRIVATE) < 0) {
         perror("pthread_spin_init");
@@ -23,7 +30,8 @@ void del_refcount(struct refcount *ref) {
 
 struct list_head *refcount_get(struct refcount *ref) {
     struct list_head *rtn = NULL;
-    pthread_spin_lock(&(ref->spin));
+    //pthread_spin_lock(&(ref->spin));
+    pthread_mutex_lock(&mut);
     rtn = container_entry(ref, struct list_head, refCounter);
 
     //Increment count atomically unless it is zero to begin with
@@ -37,7 +45,8 @@ struct list_head *refcount_get(struct refcount *ref) {
     if (oldCount == 0) {
         rtn = NULL;
     }
-    pthread_spin_unlock(&(ref->spin));
+    //pthread_spin_unlock(&(ref->spin));
+    pthread_mutex_unlock(&mut);
     return rtn;
 }
 
@@ -49,13 +58,16 @@ void list_node_delete(struct refcount *ref) {
 }
 
 bool refcount_put(struct refcount *ref, void (*destructor)(struct refcount *)) {
-    pthread_spin_lock(&(ref->spin));
+    pthread_mutex_lock(&mut);
+    //pthread_spin_lock(&(ref->spin));
     if (atomic_fetch_sub(&ref->count, 1) == 1) {
-        pthread_spin_unlock(&(ref->spin));
+        //pthread_spin_unlock(&(ref->spin));
         destructor(ref);
+        pthread_mutex_unlock(&mut);
         return true;
     }
-    pthread_spin_unlock(&(ref->spin));
+    //pthread_spin_unlock(&(ref->spin));
+    pthread_mutex_unlock(&mut);
     return false;
 }
 

@@ -44,14 +44,17 @@ void queue_push(LFQueue *q, void (*func)(void *), void *params) {
 
     //newNode->node.prev = q->head.prev;
     list_assign_pointer(&(newNode->node.prev), &(q->head.prev));
+    //list_assign_pointer(&(newNode->node.prev), &(tempHead->prev));
 
     struct list_head * _Atomic tempNode = &(newNode->node);
 
     //q->head.prev->next = &(newNode->node);
     list_assign_pointer(&(q->head.prev->next), &tempNode);
+    //list_assign_pointer(&(tempHead->prev->next), &tempNode);
 
     //q->head.prev = &(newNode->node);
     list_assign_pointer(&(q->head.prev), &tempNode);
+    //list_assign_pointer(&(tempHead->prev), &tempNode);
 
     refcount_put(&(temp->refCounter), list_node_delete);
 

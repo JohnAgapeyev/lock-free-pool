@@ -10,7 +10,7 @@
 #define TASK_COUNT 10000
 
 void print1() {
-#if 1
+#if 0
     fprintf(stderr, "1\n");
 #else
     fprintf(stdout, "1\n");
@@ -18,7 +18,7 @@ void print1() {
 }
 
 void print2() {
-#if 1
+#if 0
     fprintf(stderr, "2\n");
 #else
     fprintf(stdout, "2\n");
@@ -26,7 +26,7 @@ void print2() {
 }
 
 void print(void *num) {
-#if 1
+#if 0
     fprintf(stderr, "%d\n", *((int *) num));
 #else
     fprintf(stdout, "%d\n", *((int *) num));
@@ -57,7 +57,7 @@ void deleteQueue(LFQueue *q) {
             //printf("Job ref count: %zu\n", refcount_read(&(job->node.refCounter)));
             refcount_put(&(job->node.refCounter), list_node_delete);
         } else {
-#if 1
+#if 0
     fprintf(stderr, "Queue is empty\n");
 #else
     fprintf(stdout, "Queue is empty\n");
@@ -104,7 +104,7 @@ int main(void) {
     queue_init(q);
 
     //Redirect stderr to /dev/null
-#if 1
+#if 0
     freopen("/dev/null", "w", stderr);
 #else
     freopen("/dev/null", "w", stdout);
